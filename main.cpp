@@ -1,7 +1,8 @@
 #include <GL/glew.h>
 #include <SFML/Window.hpp>
-#include <iostream>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 #include "include/shader.h"
 
 // ---- code is primarily modeled after code found on learnOpenGL.com, but modified to be used within an SFML context ----
@@ -31,58 +32,82 @@ int main() {
     glewInit();
 
     // ---- information ----
+
     // int nrAttributes;
     // glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &nrAttributes);
     // std::cout << "Maximum nr of vertex attributes supported: " << nrAttributes << std::endl;
 
-    // ---- build and compile our shader program ----
-
-    Shader ourShader("../shaders/shader1.vert", "../shaders/shader1.frag");
-
     // ---- set up vertex data (and buffer(s)) and configure vertex attributes ----
-    float vertices1[] = {
-         0.5f,  0.5f, 0.0f,  // top right
-         0.5f, -0.5f, 0.0f,  // bottom right
-        -0.5f, -0.5f, 0.0f,  // bottom left
 
+    float vertices[] = {
+        // positions          // colors           // texture coords
+        0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f, // top right
+        0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, // bottom right
+       -0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f, // bottom left
+       -0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f  // top left
+   };
+
+    unsigned int indices[] = {
+        0, 1, 3, // first triangle
+        1, 2, 3  // second triangle
     };
 
-    unsigned int indices[] = {  // note that we start from 0!
-        0, 1, 3,  // first Triangle
-        1, 2, 3,   // second Triangle
-    };
-
-    // VAOs hold VBOs; EBOs help openGL read VAOs
-    unsigned int VBO, VAO, EBO, VBO2, VAO2;
+    unsigned int VBO, VAO, EBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
     glGenBuffers(1, &EBO);
 
-    // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
-    // ---- Rectangle shape ----
     glBindVertexArray(VAO);
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices1), vertices1, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+    // color attribute
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    // texture coord attribute
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
 
-    // note that this is allowed, the call to glVertexAttribPointer registered VBO as the vertex attribute's bound vertex buffer object so afterwards we can safely unbind
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    // load texture to be used later
+    unsigned int texture;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture); // all upcoming GL_TEXTURE_2D operations now have effect on this texture object
 
-    // You can unbind the VAO afterwards so other VAO calls won't accidentally modify this VAO, but this rarely happens. Modifying other
-    // VAOs requires a call to glBindVertexArray anyways so we generally don't unbind VAOs (nor VBOs) when it's not directly necessary.
-    glBindVertexArray(0);
+    // set the texture wrapping parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-    // remember: do NOT unbind the EBO while a VAO is active as the bound element buffer object IS stored in the VAO; keep the EBO bound.
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    // set texture filtering parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    // uncomment this call to draw in wireframe polygons.
-    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    // load and generate the texture
+    int img_width, img_height, nrChannels;
+    stbi_set_flip_vertically_on_load(true);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // Most images are 4 byte aligned, so if pixel data only has 3 bytes, there will be a malformed texture
+    unsigned char *data = stbi_load("../assets/carpet1.jpg", &img_width, &img_height, &nrChannels, 0);
+    if (data) {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, img_width, img_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    else {
+        std::cout << "Failed to load texture" << std::endl;
+    }
+
+    stbi_image_free(data);
+
+    // ---- build and compile our shader program ----
+
+    Shader ourShader("../shaders/shader1.vert", "../shaders/shader1.frag");
+    glUniform1i(glGetUniformLocation(ourShader.ID, "texture"), 0);
+
     sf::Clock clock;
 
     while (window.isOpen()) {
@@ -104,15 +129,14 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT);
 
         // draw
-        // update the uniform color
-        ourShader.use();
-        float timeValue = clock.getElapsedTime().asSeconds();
-        float greenValue = sin(timeValue) / 2.0f + 0.5f;
-        ourShader.setFloat("aColor", greenValue);
+        // bind textures on corresponding texture units
+        glActiveTexture(GL_TEXTURE);
+        glBindTexture(GL_TEXTURE_2D, texture);
 
-        // now render the triangle
+        // render container
+        ourShader.use();
         glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
         // end the current frame (internally swaps the front and back buffers)
         window.display();
