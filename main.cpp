@@ -3,9 +3,13 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#include "glm/glm.hpp"
+#include "glm/gtc/type_ptr.hpp"
 #include "include/shader.h"
 
 // ---- code is primarily modeled after code found on learnOpenGL.com, but modified to be used within an SFML context ----
+
+float sineBetween(float min, float max, float t);
 
 int main() {
     // load variables needed for the creation of the window
@@ -41,15 +45,17 @@ int main() {
 
     float vertices[] = {
         // positions          // colors           // texture coords
-        0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f, // top right
-        0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, // bottom right
-       -0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f, // bottom left
-       -0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f  // top left
+        0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 0.66f, // top right
+        0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f,  // bottom right
+       -0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f,  // bottom left
+       -0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 0.66f, // top left
+        0.0f,  1.0f, 0.0f,   0.0f, 0.0f, 1.0f,   0.5f, 1.0f
    };
 
     unsigned int indices[] = {
-        0, 1, 3, // first triangle
-        1, 2, 3  // second triangle
+        0, 1, 2, // first triangle
+        2, 3, 0, // second triangle
+        3, 4, 0
     };
 
     unsigned int VBO, VAO, EBO;
@@ -133,10 +139,23 @@ int main() {
         glActiveTexture(GL_TEXTURE);
         glBindTexture(GL_TEXTURE_2D, texture);
 
+        // create transformations
+        float time = clock.getElapsedTime().asSeconds();
+        glm::mat4 transform = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
+        transform = glm::translate(transform, glm::vec3(sineBetween(-0.5,0.5,time*5), cos(time)+(sineBetween(-0.1,0.1,time*40)), 0.0f));
+        transform = glm::rotate(transform, time*3, glm::vec3(0.0f, 0.0f, 1.0f));
+        transform = glm::scale(transform, glm::vec3(sineBetween(0.1,1.0,time), sineBetween(0.1,1.0,time), 1.0f));
+
+
+        // get matrix's uniform location and set matrix
+        ourShader.use();
+        unsigned int transformLoc = glGetUniformLocation(ourShader.ID, "transform");
+        glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(transform));
+
         // render container
         ourShader.use();
         glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, 9, GL_UNSIGNED_INT, 0);
 
         // end the current frame (internally swaps the front and back buffers)
         window.display();
@@ -148,4 +167,9 @@ int main() {
     glDeleteBuffers(1, &EBO);
 
     return 0;
+}
+
+float sineBetween(float min, float max, float t) {
+    float halfRange = (max - min) / 2;
+    return min + halfRange + sin(t) * halfRange;
 }
